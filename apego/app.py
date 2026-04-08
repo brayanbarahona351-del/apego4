@@ -1,107 +1,122 @@
 import streamlit as st
 from fpdf import FPDF
 
-# --- DATOS DE REFERENCIA ---
-ITEMS_CUIDADO = [1, 2, 4, 5, 6, 11, 12, 13, 14, 16, 17, 18, 24]
-ITEMS_SOBREP = [3, 7, 8, 9, 10, 15, 19, 20, 21, 22, 23, 25]
-INVERSOS = [2, 4, 7, 14, 15, 16, 18, 21, 22, 24, 25]
+# --- DATOS DEL MODELO PDF ---
+BLOQUES = {
+    "Sobreprotección - Baja": [
+        "Me dejaba hacer las cosas que me gustaban.",
+        "Le gustaba que yo tomara mis propias decisiones.",
+        "Me dejaba decidir las cosas por mí mismo.",
+        "Me daba más libertad de la que yo quería.",
+        "Me dejaba salir tan a menudo como yo deseaba.",
+        "Dejaba que me vistiera como a mí me gustaba."
+    ],
+    "Sobreprotección - Alta": [
+        "No quería que yo creciera.",
+        "Intentaba controlar todo lo que yo hacía.",
+        "Invadía mi vida privada.",
+        "Tendía a tratarme como a un/a niño/a.",
+        "Intentaba hacerme dependiente de él/ella.",
+        "Sentía que yo no podía cuidar de mí mismo/a a no ser que él/ella estuviera cerca.",
+        "Era sobre-protector/a conmigo."
+    ],
+    "Cuidado - Positivo": [
+        "Hablaba conmigo en un tono de voz cálido y amistoso.",
+        "No me ayudaba tanto como yo necesitaba.",
+        "Parecía entender mis problemas y preocupaciones.",
+        "Era afectuoso/a conmigo.",
+        "Disfrutaba charlando conmigo.",
+        "Me sonreía frecuentemente.",
+        "Podía hacer que me sintiera mejor cuando me encontraba contrariado.",
+        "No hablaba mucho conmigo."
+    ],
+    "Cuidado - Negativo": [
+        "Conmigo parecía emocionalmente frío/a.",
+        "No parecía entender lo que yo quería o necesitaba.",
+        "Me hacía sentir que no era querido.",
+        "No me decía palabras de elogio"
+    ]
+}
 
-PREGUNTAS = [
-    "Me hablaba con voz amistosa y cálida.", "No me ayudaba tanto como yo lo necesitaba.",
-    "Evitaba que yo saliera solo (a).", "Parecía emocionalmente fría hacia mí.",
-    "Parecía entender mis problemas y preocupaciones.", "Era afectuosa conmigo.",
-    "Le gustaba que tomara mis propias decisiones.", "No quería que creciera.",
-    "Trataba de controlar todo lo que yo hacía.", "Invadía mi privacidad.",
-    "Se entretenía conversando cosas conmigo.", "Me sonreía frecuentemente.",
-    "Me regaloneaba.", "No parecía entender lo que yo quería o necesitaba.",
-    "Me permitía decidir las cosas por mi mismo (a).", "Me hacía sentir que no era deseado.",
-    "Tenía la capacidad de reconfortarme cuando me sentía molesto/a.", "No conversaba mucho conmigo.",
-    "Trataba de hacerme dependiente de ella/él.", "Sentía que no podía cuidar de mi mismo (a), a menos que estuviera cerca.",
-    "Me daba toda la libertad que yo quería.", "Me dejaba salir lo que yo quería.",
-    "Era sobreprotectora conmigo.", "No me elogiaba.", "Me permitía vestirme como se me antojara."
-]
+# --- FUNCIONES DE CÁLCULO ---
+def calcular_puntos(respuestas, bloque_tipo):
+    total = 0
+    # Modelo 0-3 o 3-0 según el PDF
+    mapping_03 = {0: 0, 1: 1, 2: 2, 3: 3}
+    mapping_30 = {0: 3, 1: 2, 2: 1, 3: 0}
+    
+    for r in respuestas:
+        if bloque_tipo in ["Sobreprotección - Baja", "Cuidado - Negativo"]:
+            total += mapping_03[r]
+        else:
+            total += mapping_30[r]
+    return total
 
-OPCIONES_TEXTO = {1: "Muy en desacuerdo", 2: "Moderadamente en desacuerdo", 3: "Moderadamente de acuerdo", 4: "Muy de acuerdo"}
-
-# --- LÓGICA ---
-def calcular_puntuacion(respuestas):
-    cuidado, sobrep = 0, 0
-    for i, res in enumerate(respuestas):
-        n_item = i + 1
-        val = res - 1
-        puntos = (3 - val) if n_item in INVERSOS else val
-        if n_item in ITEMS_CUIDADO: cuidado += puntos
-        elif n_item in ITEMS_SOBREP: sobrep += puntos
-    return cuidado, sobrep
-
-def obtener_interpretacion(c, s):
-    if c >= 27.0:
-        if s < 13.5: return "Vínculo Óptimo", "Alta calidez y autonomía.", "Fomentar la seguridad y el afecto."
-        else: return "Control Cariñoso", "Alta calidez pero intrusivo.", "Trabajar en la independencia."
+def obtener_vinculo(cuidado, sobrep):
+    # Umbrales basados en puntuaciones medias (ajustables según baremos locales)
+    if cuidado >= 24 and sobrep < 12:
+        return "Óptimo", "Alta calidez y fomento de la autonomía.", "Desarrollo de una autoestima sana y seguridad personal."
+    elif cuidado < 24 and sobrep < 12:
+        return "Ausente o débil", "Bajo cuidado y baja sobreprotección.", "Posible sentimiento de desapego o indiferencia afectiva."
+    elif cuidado >= 24 and sobrep >= 12:
+        return "Constreñido", "Alto cuidado y alta sobreprotección.", "Dificultad para desarrollar independencia a pesar del afecto."
     else:
-        if s < 13.5: return "Vínculo Débil / Desapego", "Baja calidez y baja protección.", "Mejorar la conexión emocional."
-        else: return "Control Sin Afecto", "Baja calidez y alto control.", "Se sugiere apoyo profesional."
+        return "Control sin afecto", "Bajo cuidado y alta sobreprotección (Alto Riesgo).", "Relacionado con rechazo, frialdad e intrusión; riesgo de ansiedad y baja autonomía."
 
-# --- GENERACIÓN DE PDF ---
-def generar_pdf_completo(figura, respuestas, c, s, cat, desc, cons):
+# --- INTERFAZ ---
+st.title("PBI: Parental Bonding Instrument")
+nombre_paciente = st.text_input("Nombre del evaluado/a:")
+
+col1, col2 = st.columns(2)
+with col1:
+    st.header("Evaluación: PADRE")
+    res_p = {}
+    for bloque, preguntas in BLOQUES.items():
+        st.subheader(bloque)
+        for p in preguntas:
+            res_p[p] = st.radio(p, [0, 1, 2, 3], format_func=lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x], key=f"p_{p}")
+
+with col2:
+    st.header("Evaluación: MADRE")
+    res_m = {}
+    for bloque, preguntas in BLOQUES.items():
+        st.subheader(bloque)
+        for p in preguntas:
+            res_m[p] = st.radio(p, [0, 1, 2, 3], format_func=lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x], key=f"m_{p}")
+
+if st.button("Calcular y Generar Reporte"):
+    # Cálculos Padre
+    s_p = calcular_puntos([res_p[p] for p in BLOQUES["Sobreprotección - Baja"]], "Sobreprotección - Baja") + \
+          calcular_puntos([res_p[p] for p in BLOQUES["Sobreprotección - Alta"]], "Sobreprotección - Alta")
+    c_p = calcular_puntos([res_p[p] for p in BLOQUES["Cuidado - Positivo"]], "Cuidado - Positivo") + \
+          calcular_puntos([res_p[p] for p in BLOQUES["Cuidado - Negativo"]], "Cuidado - Negativo")
+    
+    # Cálculos Madre
+    s_m = calcular_puntos([res_m[p] for p in BLOQUES["Sobreprotección - Baja"]], "Sobreprotección - Baja") + \
+          calcular_puntos([res_m[p] for p in BLOQUES["Sobreprotección - Alta"]], "Sobreprotección - Alta")
+    c_m = calcular_puntos([res_m[p] for p in BLOQUES["Cuidado - Positivo"]], "Cuidado - Positivo") + \
+          calcular_puntos([res_m[p] for p in BLOQUES["Cuidado - Negativo"]], "Cuidado - Negativo")
+
+    # PDF
     pdf = FPDF()
     pdf.add_page()
-    
-    # Encabezado
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, f"Reporte Detallado PBI - {figura}", ln=True, align='C')
-    pdf.ln(5)
-
-    # Resultados Resumidos
-    pdf.set_font("Arial", 'B', 12)
-    pdf.set_fill_color(230, 230, 230)
-    pdf.cell(0, 10, "RESUMEN DE RESULTADOS", ln=True, fill=True)
-    pdf.set_font("Arial", size=11)
-    pdf.cell(0, 8, f"Puntaje Cuidado: {c} | Puntaje Sobreproteccion: {s}", ln=True)
-    pdf.cell(0, 8, f"Categoria: {cat}", ln=True)
-    pdf.multi_cell(0, 8, f"Consejo: {cons}")
-    pdf.ln(5)
-
-    # Detalle de Preguntas y Respuestas
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "DETALLE DE RESPUESTAS", ln=True, fill=True)
-    pdf.set_font("Arial", size=9)
+    pdf.cell(0, 10, f"Reporte PBI - {nombre_paciente}", ln=True, align='C')
     
-    for i, res in enumerate(respuestas):
-        texto_pregunta = f"{i+1}. {PREGUNTAS[i]}"
-        texto_respuesta = f"R: {OPCIONES_TEXTO[res]}"
-        # Para evitar que el texto se corte
-        pdf.multi_cell(0, 6, f"{texto_pregunta}")
-        pdf.set_font("Arial", 'I', 9)
-        pdf.cell(0, 5, f"   {texto_respuesta}", ln=True)
-        pdf.set_font("Arial", size=9)
-        pdf.ln(1)
-        
-    return pdf.output(dest='S').encode('latin-1')
+    for figura, c, s in [("PADRE", c_p, s_p), ("MADRE", c_m, s_m)]:
+        tipo, desc, cons = obtener_vinculo(c, s)
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(0, 10, f"FIGURA: {figura}", ln=True)
+        pdf.set_font("Arial", '', 12)
+        pdf.cell(0, 8, f"Puntaje Cuidado: {c} | Sobreprotección: {s}", ln=True)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 8, f"Tipo de Vínculo: {tipo}", ln=True)
+        pdf.set_font("Arial", 'I', 11)
+        pdf.multi_cell(0, 8, f"Características: {desc}")
+        pdf.set_font("Arial", '', 11)
+        pdf.multi_cell(0, 8, f"Consecuencias/Riesgos: {cons}")
+        pdf.ln(2)
 
-# --- INTERFAZ STREAMLIT ---
-st.title("📋 PBI: Cuestionario y Reporte")
-figura = st.selectbox("Seleccione figura:", ["Madre", "Padre"])
-
-respuestas_usuario = []
-for idx, pregunta in enumerate(PREGUNTAS):
-    res = st.radio(f"{idx+1}. {pregunta}", [1, 2, 3, 4], 
-                   format_func=lambda x: OPCIONES_TEXTO[x], key=f"p{idx}")
-    respuestas_usuario.append(res)
-
-if st.button("Generar Reporte Completo"):
-    pc, ps = calcular_puntuacion(respuestas_usuario)
-    cat, desc, cons = obtener_interpretacion(pc, ps)
-    
-    st.divider()
-    st.subheader("Vista Previa de Resultados")
-    st.write(f"**Estilo:** {cat}")
-    
-    pdf_bytes = generar_pdf_completo(figura, respuestas_usuario, pc, ps, cat, desc, cons)
-    
-    st.download_button(
-        label="📥 Descargar PDF con Preguntas y Respuestas",
-        data=pdf_bytes,
-        file_name=f"PBI_Detallado_{figura}.pdf",
-        mime="application/pdf"
-    )
+    pdf_output = pdf.output(dest='S').encode('latin-1')
+    st.download_button("📥 Descargar Reporte PDF", data=pdf_output, file_name=f"PBI_{nombre_paciente}.pdf")
