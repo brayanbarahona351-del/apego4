@@ -3,105 +3,124 @@ from fpdf import FPDF
 from streamlit_lottie import st_lottie
 import requests
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="PBI Honduras - Psicología", page_icon="🧠", layout="wide")
 
 def load_lottieurl(url):
-    r = requests.get(url)
-    if r.status_code != 200: return None
-    return r.json()
+    try:
+        r = requests.get(url)
+        return r.json() if r.status_code == 200 else None
+    except: return None
 
-# Animaciones según resultado
+# Animaciones dinámicas
 ANIMACIONES = {
-    "Óptimo": "https://lottiefiles.com", # Corazón/Felicidad
-    "Cariñoso": "https://lottiefiles.com", # Protección/Nudo
-    "Débil": "https://lottiefiles.com", # Soledad/Viento
-    "Crítico": "https://lottiefiles.com" # Alerta/Riesgo
+    "Óptimo": "https://lottie.host",
+    "Cariñoso": "https://lottie.host", # Ejemplo
+    "Crítico": "https://lottie.host"
 }
 
+# Estilo visual para evitar distorsiones
 st.markdown("""
     <style>
     .stApp { background-color: #FFFFFF; color: #000000; }
-    .resultado-card {
-        padding: 20px;
-        border-radius: 15px;
-        border-left: 10px solid #003366;
-        background-color: #f8f9fa;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
     .header-pnh {
-        background-color: #002244;
-        color: white !important;
-        padding: 20px;
-        border-radius: 15px;
-        text-align: center;
-        margin-bottom: 30px;
+        background-color: #002244; color: white !important;
+        padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 30px;
     }
-    label { color: black !important; font-weight: bold !important; }
+    .resultado-card {
+        padding: 20px; border-radius: 15px; border-left: 10px solid #003366;
+        background-color: #f0f4f8; color: black; margin-bottom: 20px;
+    }
+    label, p, span { color: black !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- ENCABEZADO ---
 st.markdown("""
     <div class="header-pnh">
+        <img src="https://wikimedia.org" width="80">
         <h1>POLICÍA NACIONAL DE HONDURAS</h1>
-        <p>Unidad de Psicología | Sistema de Evaluación PBI</p>
+        <p>Unidad de Psicología | Evaluación de Vínculo Parental (PBI)</p>
     </div>
     """, unsafe_allow_html=True)
 
-# --- LÓGICA ---
-PREGUNTAS_CUIDADO = ["Hablaba conmigo con voz cálida.", "Parecía entender mis problemas.", "Era afectuoso/a conmigo.", "Me sonreía frecuentemente."] # Resumido para el ejemplo
-PREGUNTAS_SOBREP = ["No quería que creciera.", "Intentaba controlar todo.", "Invadía mi privacidad.", "Era sobreprotector/a."]
+# --- LISTA COMPLETA DE PREGUNTAS ---
+PREGUNTAS_CUIDADO = [
+    "Hablaba conmigo con voz cálida y amistosa.", "No me ayudaba tanto como necesitaba.",
+    "Parecía entender mis problemas.", "Era afectuoso/a conmigo.",
+    "Disfrutaba charlando conmigo.", "Me sonreía frecuentemente.",
+    "Me hacía sentir mejor cuando estaba triste.", "No hablaba mucho conmigo.",
+    "Parecía frío/a emocionalmente.", "No entendía lo que yo quería.",
+    "Me hacía sentir que no era querido/a.", "No me daba elogios."
+]
+
+PREGUNTAS_SOBREP = [
+    "Me dejaba hacer cosas que me gustaban.", "Me dejaba tomar mis propias decisiones.",
+    "Me dejaba decidir por mí mismo/a.", "Me daba más libertad de la que quería.",
+    "Me dejaba salir seguido.", "Me dejaba vestirme como quería.",
+    "No quería que creciera.", "Intentaba controlar todo lo que hacía.",
+    "Invadía mi privacidad.", "Me trataba como a un bebé.",
+    "Intentaba hacerme dependiente.", "Sentía que no podía cuidarme solo/a.", "Era sobreprotector/a."
+]
 
 def obtener_resultado(c, s):
-    if c >= 10: # Ajustado para menos preguntas en este ejemplo
-        return ("Óptimo", "Vínculo Seguro", "Fomenta independencia.", "Óptimo") if s < 5 else ("Cariñoso", "Control Cariñoso", "Afecto intrusivo.", "Cariñoso")
-    return ("Débil", "Vínculo Débil", "Frialdad afectiva.", "Débil") if s < 5 else ("Crítico", "Control Sin Afecto", "Alto riesgo psicológico.", "Crítico")
+    # Lógica de interpretación
+    if c >= 24 and s < 12.5:
+        return "Óptimo", "Vínculo Seguro", "Alta calidez y autonomía. Personalidad resiliente.", "Óptimo"
+    elif c >= 24 and s >= 12.5:
+        return "Cariñoso", "Control Cariñoso", "Afecto intrusivo. Riesgo de dependencia emocional.", "Óptimo"
+    elif c < 24 and s < 12.5:
+        return "Débil", "Vínculo Débil", "Frialdad afectiva y desapego.", "Crítico"
+    else:
+        return "Crítico", "Control Sin Afecto", "Alto riesgo: Rechazo y rigidez. Posible ansiedad/depresión.", "Crítico"
 
 # --- INTERFAZ ---
 nombre = st.text_input("Nombre del Evaluado:")
 opcion = st.radio("Crianza:", ["Ambos Padres", "Solo Madre", "Solo Padre"], horizontal=True)
 
+opciones_pbi = [0, 1, 2, 3]
+formato = lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x]
+
 res_m_c, res_m_s = [], []
 res_p_c, res_p_s = [], []
 
-col_m, col_p = st.columns(2)
-
+# Columnas para organizar
 if "Madre" in opcion or "Ambos" in opcion:
-    with col_m:
-        st.header("👩 Madre")
-        for p in PREGUNTAS_CUIDADO: res_m_c.append(st.radio(f"M: {p}", , key=f"mc_{p}"))
-        for p in PREGUNTAS_SOBREP: res_m_s.append(st.radio(f"M: {p}", , key=f"ms_{p}"))
+    st.header("👩 Evaluación de la Madre")
+    col1, col2 = st.columns(2)
+    with col1:
+        for p in PREGUNTAS_CUIDADO: res_m_c.append(st.radio(f"M-Cuidado: {p}", opciones_pbi, format_func=formato, key=f"mc_{p}"))
+    with col2:
+        for p in PREGUNTAS_SOBREP: res_m_s.append(st.radio(f"M-Sobreprotección: {p}", opciones_pbi, format_func=formato, key=f"ms_{p}"))
 
 if "Padre" in opcion or "Ambos" in opcion:
-    with col_p:
-        st.header("👨 Padre")
-        for p in PREGUNTAS_CUIDADO: res_p_c.append(st.radio(f"P: {p}", , key=f"pc_{p}"))
-        for p in PREGUNTAS_SOBREP: res_p_s.append(st.radio(f"P: {p}", , key=f"ps_{p}"))
+    st.header("👨 Evaluación del Padre")
+    col3, col4 = st.columns(2)
+    with col3:
+        for p in PREGUNTAS_CUIDADO: res_p_c.append(st.radio(f"P-Cuidado: {p}", opciones_pbi, format_func=formato, key=f"pc_{p}"))
+    with col4:
+        for p in PREGUNTAS_SOBREP: res_p_s.append(st.radio(f"P-Sobreprotección: {p}", opciones_pbi, format_func=formato, key=f"ps_{p}"))
 
-if st.button("📊 VER RESULTADOS Y ANIMACIONES"):
-    st.divider()
+# --- RESULTADOS ---
+if st.button("📊 GENERAR DIAGNÓSTICO Y ANIMACIONES"):
+    st.balloons()
     
-    def mostrar_diagnostico(figura, c_list, s_list):
-        p_c, p_s = sum(c_list), sum(s_list)
-        tipo, titulo, desc, anim_key = obtener_resultado(p_c, p_s)
+    def mostrar_info(figura, c_list, s_list):
+        pc, ps = sum(c_list), sum(s_list)
+        tipo, titulo, desc, anim_key = obtener_resultado(pc, ps)
         
         c1, c2 = st.columns([1, 2])
         with c1:
-            lottie_anim = load_lottieurl(ANIMACIONES[anim_key])
-            st_lottie(lottie_anim, height=200, key=f"anim_{figura}")
+            anim = load_lottieurl(ANIMACIONES.get(anim_key, "https://lottie.host"))
+            st_lottie(anim, height=250, key=f"lottie_{figura}")
         with c2:
             st.markdown(f"""
                 <div class="resultado-card">
-                    <h3>Resultado {figura}: {titulo}</h3>
-                    <p><b>Puntajes:</b> Cuidado: {p_c} | Sobreprotección: {p_s}</p>
+                    <h2>Resultado {figura}: {titulo}</h2>
+                    <p><b>Puntajes:</b> Cuidado: {pc} | Sobreprotección: {ps}</p>
                     <p><b>Interpretación:</b> {desc}</p>
-                    <p><i>Análisis: Este nivel sugiere intervenciones enfocadas en fortalecer la autonomía del paciente.</i></p>
                 </div>
                 """, unsafe_allow_html=True)
 
-    if res_m_c: mostrar_diagnostico("Madre", res_m_c, res_m_s)
-    if res_p_c: mostrar_diagnostico("Padre", res_p_c, res_p_s)
-
-    st.balloons() # Animación final de celebración
+    if res_m_c: mostrar_info("Madre", res_m_c, res_m_s)
+    if res_p_c: mostrar_info("Padre", res_p_c, res_p_s)
