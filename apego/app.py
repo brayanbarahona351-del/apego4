@@ -6,7 +6,7 @@ import requests
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="PBI Honduras - Psicología", page_icon="👮", layout="wide")
 
-# Forzar visibilidad (Fondo blanco, texto negro)
+# CSS para corregir visibilidad y diseño institucional
 st.markdown("""
     <style>
     .stApp { background-color: #FFFFFF !important; color: #000000 !important; }
@@ -69,65 +69,53 @@ PREGUNTAS_SOBREP = [
 def obtener_resultado(c, s, figura):
     cut_c = 27 if figura == "Madre" else 24
     cut_s = 13.5 if figura == "Madre" else 12.5
-    
     if c >= cut_c and s < cut_s:
-        return "Vínculo Óptimo", "Alta calidez y autonomía.", "Desarrollo de una autoestima sana y seguridad personal.", "Óptimo"
+        return "Vínculo Óptimo", "Alta calidez y autonomía.", "Seguridad y resiliencia.", "Óptimo"
     elif c >= cut_c and s >= cut_s:
-        return "Control Cariñoso", "Afecto con sobreprotección.", "Dificultad para desarrollar independencia propia.", "Óptimo"
+        return "Control Cariñoso", "Afecto con sobreprotección.", "Dependencia emocional.", "Óptimo"
     elif c < cut_c and s < cut_s:
-        return "Vínculo Débil", "Frialdad afectiva y desapego.", "Riesgo de sentimientos de soledad y desapego emocional.", "Crítico"
+        return "Vínculo Débil", "Bajo afecto y bajo control.", "Desapego y soledad.", "Crítico"
     else:
-        return "Control Sin Afecto", "Bajo afecto y alto control.", "Nivel crítico: Riesgo de ansiedad, depresión y rechazo.", "Crítico"
+        return "Control Sin Afecto", "Bajo afecto y alto control.", "Riesgo de ansiedad y depresión.", "Crítico"
 
 # --- INTERFAZ ---
-nombre = st.text_input("Nombre completo del evaluado:")
+nombre = st.text_input("Nombre del evaluado:")
 opcion = st.radio("Crianza:", ["Ambos Padres", "Solo Madre", "Solo Padre"], horizontal=True)
 
-opciones_radio = 
+# CORRECCIÓN DE LA LÍNEA 86:
+opciones_radio = [0, 1, 2, 3]
 formato_pbi = lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x]
 
-res_m_c, res_m_s = [], []
-res_p_c, res_p_s = [], []
+res_m_c, res_m_s, res_p_c, res_p_s = [], [], [], []
 
 if "Madre" in opcion or "Ambos" in opcion:
-    with st.expander("📝 EVALUACIÓN DE LA MADRE", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            for p in PREGUNTAS_CUIDADO: res_m_c.append(st.radio(f"M-Cuidado: {p}", opciones_radio, format_func=formato_pbi, key=f"mc_{p}"))
-        with col2:
-            for p in PREGUNTAS_SOBREP: res_m_s.append(st.radio(f"M-Sobrep.: {p}", opciones_radio, format_func=formato_pbi, key=f"ms_{p}"))
+    with st.expander("EVALUACIÓN DE LA MADRE", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            for p in PREGUNTAS_CUIDADO: res_m_c.append(st.radio(f"M-C: {p}", opciones_radio, format_func=formato_pbi, key=f"mc_{p}"))
+        with c2:
+            for p in PREGUNTAS_SOBREP: res_m_s.append(st.radio(f"M-S: {p}", opciones_radio, format_func=formato_pbi, key=f"ms_{p}"))
 
 if "Padre" in opcion or "Ambos" in opcion:
-    with st.expander("📝 EVALUACIÓN DEL PADRE", expanded=True):
-        col3, col4 = st.columns(2)
-        with col3:
-            for p in PREGUNTAS_CUIDADO: res_p_c.append(st.radio(f"P-Cuidado: {p}", opciones_radio, format_func=formato_pbi, key=f"pc_{p}"))
-        with col4:
-            for p in PREGUNTAS_SOBREP: res_p_s.append(st.radio(f"P-Sobrep.: {p}", opciones_radio, format_func=formato_pbi, key=f"ps_{p}"))
+    with st.expander("EVALUACIÓN DEL PADRE", expanded=True):
+        c3, c4 = st.columns(2)
+        with c3:
+            for p in PREGUNTAS_CUIDADO: res_p_c.append(st.radio(f"P-C: {p}", opciones_radio, format_func=formato_pbi, key=f"pc_{p}"))
+        with c4:
+            for p in PREGUNTAS_SOBREP: res_p_s.append(st.radio(f"P-S: {p}", opciones_radio, format_func=formato_pbi, key=f"ps_{p}"))
 
-# --- RESULTADOS ---
 if st.button("📊 GENERAR DIAGNÓSTICO"):
     st.balloons()
-    
-    def mostrar_info(figura, c_list, s_list):
-        pc, ps = sum(c_list), sum(s_list)
-        tipo, tit, cons, anim_key = obtener_resultado(pc, ps, figura)
-        
-        # CORRECCIÓN AQUÍ: Se agregó el número 2 dentro de columns
-        c1, c2 = st.columns(2) 
-        with c1:
-            anim_data = load_lottieurl(ANIMACIONES.get(anim_key))
-            if anim_data: st_lottie(anim_data, height=250, key=f"anim_{figura}")
+    def mostrar_info(fig, c_l, s_l):
+        pc, ps = sum(c_l), sum(s_l)
+        tipo, tit, cons, anim_k = obtener_resultado(pc, ps, fig)
+        col_a, col_t = st.columns(2)
+        with col_a:
+            data = load_lottieurl(ANIMACIONES.get(anim_k))
+            if data: st_lottie(data, height=200, key=f"a_{fig}")
             else: st.write("🧠")
-        with c2:
-            st.markdown(f"""
-                <div class="resultado-card">
-                    <h2 style="color:#003366;">Resultado {figura}: {tipo}</h2>
-                    <p><b>Puntajes:</b> Cuidado: {pc} | Sobreprotección: {ps}</p>
-                    <p><b>Análisis:</b> {tit}</p>
-                    <p><b>Consecuencias:</b> {cons}</p>
-                </div>
-                """, unsafe_allow_html=True)
+        with col_t:
+            st.markdown(f'<div class="resultado-card"><h3>{fig}: {tipo}</h3><p>{tit}</p><p><i>{cons}</i></p></div>', unsafe_allow_html=True)
 
     if res_m_c: mostrar_info("Madre", res_m_c, res_m_s)
     if res_p_c: mostrar_info("Padre", res_p_c, res_p_s)
