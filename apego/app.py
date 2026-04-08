@@ -1,148 +1,107 @@
 import streamlit as st
 from fpdf import FPDF
+from streamlit_lottie import st_lottie
+import requests
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="PBI - Policía Nacional de Honduras", page_icon="👮", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="PBI Honduras - Psicología", page_icon="🧠", layout="wide")
 
-# CSS para corregir visibilidad y forzar colores legibles
+def load_lottieurl(url):
+    r = requests.get(url)
+    if r.status_code != 200: return None
+    return r.json()
+
+# Animaciones según resultado
+ANIMACIONES = {
+    "Óptimo": "https://lottiefiles.com", # Corazón/Felicidad
+    "Cariñoso": "https://lottiefiles.com", # Protección/Nudo
+    "Débil": "https://lottiefiles.com", # Soledad/Viento
+    "Crítico": "https://lottiefiles.com" # Alerta/Riesgo
+}
+
 st.markdown("""
     <style>
-    /* Forzar fondo claro y texto oscuro en toda la app */
-    .stApp {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-    }
-    /* Estilo del encabezado institucional */
-    .header-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background-color: #002244; /* Azul oscuro policial */
+    .stApp { background-color: #FFFFFF; color: #000000; }
+    .resultado-card {
         padding: 20px;
         border-radius: 15px;
+        border-left: 10px solid #003366;
+        background-color: #f8f9fa;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .header-pnh {
+        background-color: #002244;
         color: white !important;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
         margin-bottom: 30px;
-        border: 2px solid #001122;
     }
-    .header-container h1, .header-container h3 {
-        color: white !important;
-        margin: 0;
-    }
-    /* Forzar que las etiquetas de las preguntas sean negras y visibles */
-    label, p, span, .stMarkdown {
-        color: #000000 !important;
-        font-weight: 500 !important;
-    }
-    /* Estilo para los sliders y radios */
-    .stSelectSlider div {
-        color: #000000 !important;
-    }
+    label { color: black !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENCABEZADO CON LOGOS ---
+# --- ENCABEZADO ---
 st.markdown("""
-    <div class="header-container">
-        <img src="https://wikimedia.org" width="90">
-        <div style="text-align: center;">
-            <h1>POLICÍA NACIONAL DE HONDURAS</h1>
-            <h3>Unidad de Psicología - Evaluación PBI</h3>
-        </div>
-        <img src="https://wikimedia.org" width="70">
+    <div class="header-pnh">
+        <h1>POLICÍA NACIONAL DE HONDURAS</h1>
+        <p>Unidad de Psicología | Sistema de Evaluación PBI</p>
     </div>
     """, unsafe_allow_html=True)
 
-# --- LÓGICA DE PREGUNTAS (Basada en el modelo oficial) ---
-PREGUNTAS_CUIDADO = [
-    "Hablaba conmigo con voz cálida y amistosa.", "No me ayudaba tanto como necesitaba.",
-    "Parecía entender mis problemas y preocupaciones.", "Era afectuoso/a conmigo.",
-    "Disfrutaba charlando conmigo.", "Me sonreía frecuentemente.",
-    "Podía hacer que me sintiera mejor cuando estaba triste.", "No hablaba mucho conmigo.",
-    "Parecía frío/a emocionalmente.", "No parecía entender lo que quería o necesitaba.",
-    "Me hacía sentir que no era querido/a.", "No me daba elogios."
-]
+# --- LÓGICA ---
+PREGUNTAS_CUIDADO = ["Hablaba conmigo con voz cálida.", "Parecía entender mis problemas.", "Era afectuoso/a conmigo.", "Me sonreía frecuentemente."] # Resumido para el ejemplo
+PREGUNTAS_SOBREP = ["No quería que creciera.", "Intentaba controlar todo.", "Invadía mi privacidad.", "Era sobreprotector/a."]
 
-PREGUNTAS_SOBREP = [
-    "Me dejaba hacer cosas que me gustaban.", "Le gustaba que tomara mis propias decisiones.",
-    "Me dejaba decidir por mí mismo/a.", "Me daba más libertad de la que quería.",
-    "Me dejaba salir tan seguido como quería.", "Me dejaba vestirme como quería.",
-    "No quería que creciera.", "Intentaba controlar todo lo que hacía.",
-    "Invadía mi privacidad.", "Me trataba como a un bebé.",
-    "Intentaba hacerme dependiente.", "Sentía que no podía cuidarme solo/a.", "Era sobreprotector/a."
-]
+def obtener_resultado(c, s):
+    if c >= 10: # Ajustado para menos preguntas en este ejemplo
+        return ("Óptimo", "Vínculo Seguro", "Fomenta independencia.", "Óptimo") if s < 5 else ("Cariñoso", "Control Cariñoso", "Afecto intrusivo.", "Cariñoso")
+    return ("Débil", "Vínculo Débil", "Frialdad afectiva.", "Débil") if s < 5 else ("Crítico", "Control Sin Afecto", "Alto riesgo psicológico.", "Crítico")
 
-def interpretar_pbi(c, s):
-    if c >= 24 and s < 12.5:
-        return "Vínculo Óptimo", "Alta calidez y autonomía.", "Consecuencias: Personalidad segura, buena autoestima y relaciones sanas."
-    elif c >= 24 and s >= 12.5:
-        return "Control Cariñoso", "Afecto presente pero con sobreprotección.", "Consecuencias: Dependencia emocional y dificultad para decidir solo."
-    elif c < 24 and s < 12.5:
-        return "Vínculo Débil", "Bajo afecto y poca supervisión.", "Consecuencias: Sentimientos de soledad y frialdad afectiva."
-    else:
-        return "Control Sin Afecto (Riesgo)", "Bajo afecto y alto control.", "Consecuencias: Riesgo de ansiedad, depresión y sentimientos de rechazo."
-
-# --- INTERFAZ DE USUARIO ---
-st.write("### 📋 Datos Generales")
-nombre = st.text_input("Nombre completo del evaluado:")
-opcion = st.radio("Configuración familiar:", ["Ambos Padres", "Solo Madre", "Solo Padre"], horizontal=True)
+# --- INTERFAZ ---
+nombre = st.text_input("Nombre del Evaluado:")
+opcion = st.radio("Crianza:", ["Ambos Padres", "Solo Madre", "Solo Padre"], horizontal=True)
 
 res_m_c, res_m_s = [], []
 res_p_c, res_p_s = [], []
 
-# Formulario Madre
+col_m, col_p = st.columns(2)
+
 if "Madre" in opcion or "Ambos" in opcion:
-    st.markdown("---")
-    st.header("👩 Evaluación de la Madre")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Escala de Cuidado")
-        for p in PREGUNTAS_CUIDADO:
-            res_m_c.append(st.radio(f"M-C: {p}", [0,1,2,3], format_func=lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x], key=f"mc_{p}"))
-    with col2:
-        st.subheader("Sobreprotección")
-        for p in PREGUNTAS_SOBREP:
-            res_m_s.append(st.radio(f"M-S: {p}", [0,1,2,3], format_func=lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x], key=f"ms_{p}"))
+    with col_m:
+        st.header("👩 Madre")
+        for p in PREGUNTAS_CUIDADO: res_m_c.append(st.radio(f"M: {p}", , key=f"mc_{p}"))
+        for p in PREGUNTAS_SOBREP: res_m_s.append(st.radio(f"M: {p}", , key=f"ms_{p}"))
 
-# Formulario Padre
 if "Padre" in opcion or "Ambos" in opcion:
-    st.markdown("---")
-    st.header("👨 Evaluación del Padre")
-    col3, col4 = st.columns(2)
-    with col3:
-        st.subheader("Escala de Cuidado")
-        for p in PREGUNTAS_CUIDADO:
-            res_p_c.append(st.radio(f"P-C: {p}", [0,1,2,3], format_func=lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x], key=f"pc_{p}"))
-    with col4:
-        st.subheader("Sobreprotección")
-        for p in PREGUNTAS_SOBREP:
-            res_p_s.append(st.radio(f"P-S: {p}", [0,1,2,3], format_func=lambda x: ["Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo"][x], key=f"ps_{p}"))
+    with col_p:
+        st.header("👨 Padre")
+        for p in PREGUNTAS_CUIDADO: res_p_c.append(st.radio(f"P: {p}", , key=f"pc_{p}"))
+        for p in PREGUNTAS_SOBREP: res_p_s.append(st.radio(f"P: {p}", , key=f"ps_{p}"))
 
-# --- BOTÓN DE RESULTADOS ---
-if st.button("📊 Generar Reporte Final e Imprimir PDF"):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "REPORTE PSICOLÓGICO - PBI", ln=True, align='C')
-    pdf.set_font("Arial", '', 12)
-    pdf.cell(0, 10, f"Paciente: {nombre}", ln=True)
-    pdf.cell(0, 10, f"Crianza: {opcion}", ln=True)
-    pdf.ln(10)
+if st.button("📊 VER RESULTADOS Y ANIMACIONES"):
+    st.divider()
+    
+    def mostrar_diagnostico(figura, c_list, s_list):
+        p_c, p_s = sum(c_list), sum(s_list)
+        tipo, titulo, desc, anim_key = obtener_resultado(p_c, p_s)
+        
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            lottie_anim = load_lottieurl(ANIMACIONES[anim_key])
+            st_lottie(lottie_anim, height=200, key=f"anim_{figura}")
+        with c2:
+            st.markdown(f"""
+                <div class="resultado-card">
+                    <h3>Resultado {figura}: {titulo}</h3>
+                    <p><b>Puntajes:</b> Cuidado: {p_c} | Sobreprotección: {p_s}</p>
+                    <p><b>Interpretación:</b> {desc}</p>
+                    <p><i>Análisis: Este nivel sugiere intervenciones enfocadas en fortalecer la autonomía del paciente.</i></p>
+                </div>
+                """, unsafe_allow_html=True)
 
-    def agregar_seccion(pdf, titulo, c_score, s_score):
-        nivel, desc, cons = interpretar_pbi(sum(c_score), sum(s_score))
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 10, f"FIGURA: {titulo}", ln=True)
-        pdf.set_font("Arial", '', 12)
-        pdf.cell(0, 8, f"Cuidado: {sum(c_score)} | Sobreprotección: {sum(s_score)}", ln=True)
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 8, f"Resultado: {nivel}", ln=True)
-        pdf.set_font("Arial", '', 11)
-        pdf.multi_cell(0, 7, f"Interpretación: {desc}")
-        pdf.multi_cell(0, 7, f"Consecuencias: {cons}")
-        pdf.ln(5)
+    if res_m_c: mostrar_diagnostico("Madre", res_m_c, res_m_s)
+    if res_p_c: mostrar_diagnostico("Padre", res_p_c, res_p_s)
 
-    if res_m_c: agregar_seccion(pdf, "MADRE", res_m_c, res_m_s)
-    if res_p_c: agregar_seccion(pdf, "PADRE", res_p_c, res_p_s)
-
-    pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    st.download_button("📥 DESCARGAR PDF", data=pdf_bytes, file_name=f"PBI_{nombre}.pdf")
+    st.balloons() # Animación final de celebración
